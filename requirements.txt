@@ -1,6 +1,5 @@
 fastapi
 uvicorn[standard]
-gunicorn
 python-multipart
 python-dotenv
 pydantic
@@ -10,8 +9,8 @@ pypdf
 python-docx
 docx2txt
 chromadb
+fastembed
 llama-index-core
 llama-index-llms-openai-like
-llama-index-embeddings-fastembed
 llama-index-vector-stores-chroma
 llama-index-readers-file

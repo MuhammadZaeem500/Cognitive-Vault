@@ -3,6 +3,7 @@ import shutil
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, List
 
 import chromadb
 import pandas as pd
@@ -11,14 +12,46 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastembed import TextEmbedding
 from llama_index.core import Document, Settings, SimpleDirectoryReader, VectorStoreIndex
+from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.postprocessor import SimilarityPostprocessor
-from llama_index.embeddings.fastembed import FastEmbedEmbedding
 from llama_index.llms.openai_like import OpenAILike
 from llama_index.vector_stores.chroma import ChromaVectorStore
-from pydantic import BaseModel
+from pydantic import BaseModel, PrivateAttr
 
 load_dotenv()
+
+
+# ---------- Embeddings (fastembed / ONNX, no PyTorch) ----------
+class FastEmbedEmbedding(BaseEmbedding):
+    """Minimal LlamaIndex wrapper around fastembed to keep memory use low."""
+
+    _model: Any = PrivateAttr()
+
+    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5", **kwargs: Any):
+        super().__init__(model_name=model_name, **kwargs)
+        self._model = TextEmbedding(model_name=model_name)
+
+    @classmethod
+    def class_name(cls) -> str:
+        return "FastEmbedEmbedding"
+
+    def _embed(self, texts: List[str]) -> List[List[float]]:
+        return [vec.tolist() for vec in self._model.embed(texts)]
+
+    def _get_query_embedding(self, query: str) -> List[float]:
+        return self._embed([query])[0]
+
+    async def _aget_query_embedding(self, query: str) -> List[float]:
+        return self._get_query_embedding(query)
+
+    def _get_text_embedding(self, text: str) -> List[float]:
+        return self._embed([text])[0]
+
+    def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+        return self._embed(texts)
+
 
 # ---------- Paths & config ----------
 BASE_DIR = Path(__file__).resolve().parent
