@@ -43,7 +43,7 @@ cognitive-vault/
 ### 1. Clone and enter the project
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/MuhammadZaeem500/Cognitive-Vault
 cd cognitive-vault
 ```
 
@@ -52,7 +52,7 @@ cd cognitive-vault
 ```bash
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 ```
 
 ### 3. Configure environment variables
