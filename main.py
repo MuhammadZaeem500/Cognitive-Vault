@@ -13,7 +13,13 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastembed import TextEmbedding
-from llama_index.core import Document, Settings, SimpleDirectoryReader, VectorStoreIndex
+from llama_index.core import (
+    Document,
+    PromptTemplate,
+    Settings,
+    SimpleDirectoryReader,
+    VectorStoreIndex,
+)
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.llms.openai_like import OpenAILike
@@ -70,8 +76,26 @@ if "/" not in MODEL:                      # OpenRouter model ids look like "open
     MODEL = f"openai/{MODEL}"
 
 # Chunks scoring below this are ignored. Tune it against your own questions.
-SIMILARITY_CUTOFF = float(os.getenv("SIMILARITY_CUTOFF", "0.5"))
+SIMILARITY_CUTOFF = float(os.getenv("SIMILARITY_CUTOFF", "0.3"))
 TOP_K = int(os.getenv("TOP_K", "5"))
+
+NOT_FOUND_MESSAGE = (
+    "I couldn't find anything about that in your documents. "
+    "Try asking about something specific from them."
+)
+
+QA_TEMPLATE = PromptTemplate(
+    "You are a helpful assistant answering questions about the user's uploaded documents.\n"
+    "Excerpts from the documents are below.\n"
+    "---------------------\n"
+    "{context_str}\n"
+    "---------------------\n"
+    "Use the excerpts to answer the question. If the user asks what a document is about "
+    "or what it contains, summarize the excerpts. Do not use outside knowledge. "
+    "If the excerpts clearly do not help, reply with exactly: NOT_FOUND\n"
+    "Question: {query_str}\n"
+    "Answer: "
+)
 
 if not API_KEY:
     print("WARNING: OPENAI_API_KEY is not set. Questions will fail until you add it to .env")
@@ -85,10 +109,6 @@ Settings.llm = OpenAILike(
     is_chat_model=True,
     context_window=128000,
     temperature=0.1,
-    system_prompt=(
-        "You answer questions using only the provided document excerpts. "
-        "If the excerpts do not contain the answer, say you could not find it in the documents."
-    ),
 )
 Settings.chunk_size = 512
 Settings.chunk_overlap = 64
@@ -101,6 +121,7 @@ vector_store = ChromaVectorStore(chroma_collection=collection)
 index = VectorStoreIndex.from_vector_store(vector_store)
 query_engine = index.as_query_engine(
     similarity_top_k=TOP_K,
+    text_qa_template=QA_TEMPLATE,
     node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=SIMILARITY_CUTOFF)],
 )
 
@@ -252,13 +273,16 @@ def query(req: QueryRequest):
             detail="The language model request failed. Check your API key and model name.",
         )
 
+    # Uncomment to debug what the model saw and said:
+    # print("SOURCES:", [(n.node.metadata.get("file_name"), n.score) for n in response.source_nodes])
+    # print("ANSWER:", str(response))
+
     nodes = response.source_nodes
-    if not nodes:
-        return {
-            "answer": "I couldn't find anything relevant to that in your documents. "
-                      "Try rephrasing, or upload a file that covers it.",
-            "sources": [],
-        }
+    answer = str(response).strip()
+
+    # Nothing retrieved, or the model said the excerpts don't help -> no fake citations
+    if not nodes or not answer or "NOT_FOUND" in answer.upper():
+        return {"answer": NOT_FOUND_MESSAGE, "sources": []}
 
     sources = [
         {
@@ -268,7 +292,7 @@ def query(req: QueryRequest):
         }
         for n in nodes
     ]
-    return {"answer": str(response).strip(), "sources": sources}
+    return {"answer": answer, "sources": sources}
 
 
 if __name__ == "__main__":
