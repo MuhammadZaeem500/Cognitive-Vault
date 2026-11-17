@@ -1,0 +1,96 @@
+/* ===== Base ===== */
+body {
+    font-family: 'Montserrat', sans-serif !important;
+    background-color: #f7f3ed;
+    color: #2c2522;
+}
+
+/* Cairo Play for headers and titles */
+h1, h2, h3, .font-heading {
+    font-family: 'Cairo Play', sans-serif !important;
+}
+
+/* ===== Custom Toasts ===== */
+#toast-root {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 9999;
+    pointer-events: none;
+}
+
+.toast {
+    --accent: #b5532b;
+    pointer-events: auto;
+    position: relative;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    width: 340px;
+    padding: 14px 16px 16px 20px;
+    background: #fffdf8;
+    border: 1px solid #e2d7c0;
+    border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(59, 47, 37, 0.15);
+    font-family: "Montserrat", sans-serif;
+    overflow: hidden;
+    animation: toast-in 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+.toast.leaving { animation: toast-out 0.25s ease-in both; }
+
+/* "notebook margin" stripe */
+.toast::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 5px;
+    background: var(--accent);
+}
+
+.toast-icon {
+    flex: none;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    background: color-mix(in srgb, var(--accent) 15%, white);
+    color: var(--accent);
+    font-size: 15px;
+    font-weight: 700;
+}
+.toast-body { flex: 1; min-width: 0; }
+.toast-title { font-size: 14px; font-weight: 600; color: #2e241b; }
+.toast-msg { margin-top: 2px; font-size: 13px; color: #6b5b4a; line-height: 1.4; word-break: break-word; }
+.toast-close {
+    background: none; border: 0; cursor: pointer;
+    color: #a8977c; font-size: 18px; line-height: 1;
+}
+.toast-close:hover { color: #2e241b; }
+
+/* countdown bar */
+.toast-bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 3px;
+    background: var(--accent);
+    transform-origin: left;
+    animation: toast-bar linear both;
+}
+
+.toast.success { --accent: #4f7a3a; }
+.toast.error   { --accent: #b3352b; }
+.toast.info    { --accent: #3d6c8f; }
+.toast.loading { --accent: #b5532b; }
+
+.toast.loading .toast-icon { animation: toast-spin 0.9s linear infinite; }
+
+@keyframes toast-in  { from { opacity: 0; transform: translateX(40px) scale(.95); } to { opacity: 1; transform: none; } }
+@keyframes toast-out { to   { opacity: 0; transform: translateX(40px) scale(.95); } }
+@keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes toast-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 480px) {
+    #toast-root { left: 12px; right: 12px; top: 12px; }
+    .toast { width: auto; }
+}

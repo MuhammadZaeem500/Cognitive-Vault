@@ -5,27 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CognitiveVault — Universal RAG Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- New Google Fonts Link -->
+
+    <!-- Google Fonts Link -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cairo+Play:wght@200..1000&family=Montserrat+Alternates:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Rubik+Storm&display=swap" rel="stylesheet">
 
-    <style>
-        /* Apply Montserrat as the primary font globally */
-        body { 
-            font-family: 'Montserrat', sans-serif !important; 
-            background-color: #f7f3ed; 
-            color: #2c2522; 
-        }
-
-        /* Apply Cairo Play or Montserrat Alternates for specific headers if desired */
-        h1, h2, h3, .font-heading {
-            font-family: 'Cairo Play', sans-serif !important;
-        }
-    </style>
+    <!-- Custom styles -->
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="h-screen flex overflow-hidden">
+
+    <!-- Toast Notification Container -->
+    <div id="toast-root" aria-live="polite" aria-atomic="false"></div>
 
     <!-- COLUMN 1: Collections Sidebar -->
     <aside class="w-1/4 bg-[#f0ebe1] border-r border-[#e6dfd5] flex flex-col p-5">
@@ -38,7 +30,7 @@
             <label class="block border-2 border-dashed border-[#dcd3c9] hover:border-[#4f46e5] rounded-xl p-4 text-center cursor-pointer bg-white transition">
                 <span class="text-sm font-medium text-[#5c524b]">📁 + Add documents</span>
                 <span class="block text-xs text-gray-400 mt-1">PDF, Excel, Word, CSV, MD</span>
-                <input type="file" id="fileInput" class="hidden" multiple onchange="uploadFiles(this.files)">
+                <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.docx,.xlsx,.csv,.md" onchange="uploadFiles(this.files)">
             </label>
         </div>
 
@@ -84,31 +76,143 @@
     </aside>
 
     <script>
-        async function loadFiles() {
-            const res = await fetch('/api/files');
-            const data = await res.json();
-            const listEl = document.getElementById('fileList');
-            listEl.innerHTML = data.files.map(f => `
-                <div class="flex items-center space-x-2 p-2 bg-white rounded-lg border border-[#e6dfd5] text-xs font-medium text-[#2c2522]">
-                    <span>📄</span>
-                    <span class="truncate">${f}</span>
-                </div>
-            `).join('');
+        // ===== Helpers =====
+        function escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
         }
 
-        async function uploadFiles(files) {
-            const formData = new FormData();
-            for (let file of files) formData.append('files', file);
-            
-            const res = await fetch('/api/upload', { method: 'POST', body: formData });
-            if (res.ok) {
-                loadFiles();
-                alert("Vault updated successfully!");
-            } else {
-                alert("Upload failed.");
+        const INSPECTOR_PLACEHOLDER = '<p class="text-gray-400 italic text-center mt-20">Click or trigger a query to inspect cited text chunks and relevance scores here.</p>';
+
+        // ===== Custom Toast System =====
+        const TOAST_ICONS = { success: '✓', error: '!', info: 'i', loading: '↻' };
+
+        function showToast({ type = 'info', title, message = '', duration = 4000 }) {
+            const root = document.getElementById('toast-root');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+
+            el.innerHTML = `
+                <div class="toast-icon">${TOAST_ICONS[type]}</div>
+                <div class="toast-body">
+                    <div class="toast-title"></div>
+                    <div class="toast-msg"></div>
+                </div>
+                <button class="toast-close" aria-label="Dismiss">×</button>
+                ${duration ? `<div class="toast-bar" style="animation-duration:${duration}ms"></div>` : ''}
+            `;
+            // textContent avoids injecting HTML from file names or server errors
+            el.querySelector('.toast-title').textContent = title;
+            el.querySelector('.toast-msg').textContent = message;
+
+            let timer;
+            const close = () => {
+                clearTimeout(timer);
+                el.classList.add('leaving');
+                el.addEventListener('animationend', () => el.remove(), { once: true });
+            };
+
+            el.querySelector('.toast-close').onclick = close;
+            if (duration) timer = setTimeout(close, duration);
+
+            root.appendChild(el);
+
+            return {
+                close,
+                update({ type: t, title: ti, message: m = '', duration: d = 4000 }) {
+                    clearTimeout(timer);
+                    el.className = `toast ${t}`;
+                    el.setAttribute('role', t === 'error' ? 'alert' : 'status');
+                    el.querySelector('.toast-icon').textContent = TOAST_ICONS[t];
+                    el.querySelector('.toast-title').textContent = ti;
+                    el.querySelector('.toast-msg').textContent = m;
+                    el.querySelector('.toast-bar')?.remove();
+                    if (d) {
+                        const bar = document.createElement('div');
+                        bar.className = 'toast-bar';
+                        bar.style.animationDuration = d + 'ms';
+                        el.appendChild(bar);
+                        timer = setTimeout(close, d);
+                    }
+                },
+            };
+        }
+
+        // ===== Files =====
+        async function loadFiles() {
+            const listEl = document.getElementById('fileList');
+            try {
+                const res = await fetch('/api/files');
+                if (!res.ok) throw new Error('Request failed');
+                const data = await res.json();
+
+                if (data.files && data.files.length > 0) {
+                    listEl.innerHTML = data.files.map(f => `
+                        <div class="flex items-center space-x-2 p-2 bg-white rounded-lg border border-[#e6dfd5] text-xs font-medium text-[#2c2522]">
+                            <span>📄</span>
+                            <span class="truncate flex-1">${escapeHtml(f)}</span>
+                            <button type="button" data-file="${escapeHtml(f)}" class="delete-file text-gray-400 hover:text-red-600 text-base leading-none" aria-label="Remove ${escapeHtml(f)}">×</button>
+                        </div>
+                    `).join('');
+                } else {
+                    listEl.innerHTML = '<p class="text-gray-400 text-xs italic">No documents uploaded yet.</p>';
+                }
+            } catch (err) {
+                console.error('Failed to load files:', err);
+                showToast({ type: 'error', title: 'Could not load documents', message: 'Is the server running?' });
             }
         }
 
+        async function uploadFiles(fileList) {
+            const files = Array.from(fileList);   // copy before resetting the input
+            document.getElementById('fileInput').value = '';
+            if (!files.length) return;
+
+            const formData = new FormData();
+            files.forEach(file => formData.append('files', file));
+
+            const label = files.length === 1 ? files[0].name : `${files.length} files`;
+            const t = showToast({ type: 'loading', title: 'Indexing…', message: label, duration: 0 });
+
+            try {
+                const res = await fetch('/api/upload', { method: 'POST', body: formData });
+                let body = {};
+                try { body = await res.json(); } catch (_) {}
+                await loadFiles();
+
+                if (res.ok && !(body.errors && body.errors.length)) {
+                    t.update({ type: 'success', title: 'Ready to chat', message: 'Vault synchronized successfully.' });
+                } else if (res.ok) {
+                    t.update({ type: 'error', title: `Indexed ${body.indexed}, skipped some`, message: body.errors.join('; '), duration: 7000 });
+                } else {
+                    const msg = typeof body.detail === 'string' ? body.detail : 'Check the file formats and try again.';
+                    t.update({ type: 'error', title: 'Upload failed', message: msg, duration: 7000 });
+                }
+            } catch (err) {
+                t.update({ type: 'error', title: 'Upload failed', message: 'Could not reach the server.' });
+            }
+        }
+
+        async function deleteFile(name) {
+            try {
+                const res = await fetch('/api/files/' + encodeURIComponent(name), { method: 'DELETE' });
+                if (!res.ok) throw new Error('Delete failed');
+                await loadFiles();
+                showToast({ type: 'success', title: 'Removed', message: name, duration: 3000 });
+            } catch (err) {
+                showToast({ type: 'error', title: 'Could not remove file', message: name });
+            }
+        }
+
+        // Event delegation: file names never go inside inline onclick handlers
+        document.getElementById('fileList').addEventListener('click', e => {
+            const btn = e.target.closest('.delete-file');
+            if (btn) deleteFile(btn.dataset.file);
+        });
+
+        // ===== Chat =====
         async function sendQuery(e) {
             e.preventDefault();
             const input = document.getElementById('queryInput');
@@ -121,7 +225,7 @@
             feed.innerHTML += `
                 <div class="flex justify-end">
                     <div class="bg-[#2c2522] text-white rounded-2xl px-4 py-3 max-w-lg text-sm shadow">
-                        ${prompt}
+                        ${escapeHtml(prompt)}
                     </div>
                 </div>
             `;
@@ -144,33 +248,42 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prompt })
                 });
+                if (!res.ok) {
+                    let detail = 'Query failed';
+                    try { const err = await res.json(); if (typeof err.detail === 'string') detail = err.detail; } catch (_) {}
+                    throw new Error(detail);
+                }
                 const data = await res.json();
 
                 document.getElementById(loadingId).remove();
 
                 let badges = '';
-                let inspectorContent = '';
                 if (data.sources && data.sources.length > 0) {
+                    // Show each file once, even if several chunks came from it
+                    const seen = new Set();
+                    const uniqueSources = data.sources.filter(s => !seen.has(s.file_name) && seen.add(s.file_name));
+
                     badges = '<div class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">';
-                    data.sources.forEach((src, idx) => {
-                        badges += `<span class="bg-[#f0ebe1] border border-[#e3dbd0] text-[#5c524b] px-2 py-1 rounded-md text-xs font-medium">📖 ${src.file_name}</span>`;
-                        if (idx === 0) {
-                            inspectorContent = `
-                                <div class="font-bold text-gray-900 mb-1">${src.file_name}</div>
-                                <div class="text-green-600 font-semibold mb-2">Relevance Score: ${src.score.toFixed(4)}</div>
-                                <hr class="my-2 border-gray-200">
-                                <p class="leading-relaxed">${src.text}</p>
-                            `;
-                        }
+                    uniqueSources.forEach(src => {
+                        badges += `<span class="bg-[#f0ebe1] border border-[#e3dbd0] text-[#5c524b] px-2 py-1 rounded-md text-xs font-medium">📖 ${escapeHtml(src.file_name)}</span>`;
                     });
                     badges += '</div>';
-                    document.getElementById('sourceInspector').innerHTML = inspectorContent;
+
+                    const top = data.sources[0];
+                    document.getElementById('sourceInspector').innerHTML = `
+                        <div class="font-bold text-gray-900 mb-1">${escapeHtml(top.file_name)}</div>
+                        <div class="text-green-600 font-semibold mb-2">Relevance Score: ${Number(top.score).toFixed(4)}</div>
+                        <hr class="my-2 border-gray-200">
+                        <p class="leading-relaxed">${escapeHtml(top.text)}</p>
+                    `;
+                } else {
+                    document.getElementById('sourceInspector').innerHTML = INSPECTOR_PLACEHOLDER;
                 }
 
                 feed.innerHTML += `
                     <div class="flex justify-start">
                         <div class="bg-white border border-[#e6dfd5] rounded-2xl px-5 py-4 max-w-xl text-sm shadow-sm text-[#2c2522]">
-                            <div class="leading-relaxed">${data.answer.replace(/\n/g, '<br>')}</div>
+                            <div class="leading-relaxed">${escapeHtml(data.answer).replace(/\n/g, '<br>')}</div>
                             ${badges}
                         </div>
                     </div>
@@ -178,10 +291,13 @@
                 feed.scrollTop = feed.scrollHeight;
 
             } catch (err) {
-                document.getElementById(loadingId).innerHTML = `<span class="text-red-500">Error processing query.</span>`;
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.innerHTML = `<span class="text-red-500 text-sm">Error processing query.</span>`;
+                showToast({ type: 'error', title: 'Query failed', message: err.message || 'Could not reach the knowledge vault.' });
             }
         }
 
+        // Load the file list once when the page opens
         loadFiles();
     </script>
 </body>
