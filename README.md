@@ -1,89 +1,71 @@
 # 🛡️ CognitiveVault
 
-**CognitiveVault** is a local RAG (Retrieval-Augmented Generation) assistant web application featuring a 3-column NotebookLM-style interface, universal multi-format file attachment parsing, and a custom FastAPI backend powered by LlamaIndex, ChromaDB, and OpenRouter (`gpt-4o-mini`).
+**CognitiveVault** is a lightweight, local-first, universal RAG (Retrieval-Augmented Generation) assistant. It allows users to securely upload, store, index, and query across multiple document formats (`.pdf`, `.docx`, `.xlsx`, `.csv`, `.md`) with strict per-user data isolation, powered by FastAPI, LlamaIndex, ChromaDB, FastEmbed, and OpenRouter (`gpt-4o-mini`).
 
 ---
 
-## 🌟 Key Features
+## 🚀 Key Features
 
-* **Universal Document Attachments:** Upload PDFs, Word (`.docx`), Excel (`.xlsx`), CSVs, and Markdown files with automated background indexing.
-* **NotebookLM-Inspired 3-Column UI:** A clean, warm-toned aesthetic featuring a **Collections Sidebar**, **Main Conversational Feed**, and a **Source Inspector** for real-time citation tracking.
-* **Custom Typography:** Styled with Google Fonts (**Montserrat**, **Cairo Play**, and **Montserrat Alternates**).
-* **Local Vector Persistence:** Powered by **ChromaDB** to securely persist and query your local knowledge base.
+- **Strict User Data Isolation**: Powered by SQLAlchemy-backed user management and LlamaIndex metadata filtering (`user_id`), ensuring users can only search and view their own uploaded files.
+- **Local Embeddings**: Uses `fastembed` (`BAAI/bge-small-en-v1.5`) for running efficient, high-performance vector embeddings locally on your machine without external embedding API costs.
+- **Robust Authentication**: Secure JWT authentication paired with PBKDF2-HMAC-SHA256 password hashing (optimized for Python 3.12 compatibility) and automatic disposable/fake email blocking.
+- **Multi-Format Document Support**: Seamlessly parses and chunks PDFs, Word documents, Excel workbooks (sheet-by-sheet), CSVs, and Markdown files.
+- **Modern Three-Column UI**: Styled with Tailwind CSS featuring a collections sidebar, a conversational chat feed with citation badges, and a real-time Source Inspector panel.
 
 ---
 
 ## 🛠️ Tech Stack
 
-* **Backend:** Python 3.12, FastAPI, Uvicorn, Gunicorn, Pydantic
-* **RAG & Orchestration:** LlamaIndex, HuggingFace Embeddings (`BAAI/bge-small-en-v1.5`), OpenRouter (`gpt-4o-mini`)
-* **Vector Database:** ChromaDB (local persistence)
-* **Frontend:** Tailwind CSS, HTML5, vanilla JavaScript
-* **Document Parsers:** `pypdf`, `python-docx`, `openpyxl`, `pandas`, `llama-index-readers-file`
+- **Backend**: Python, FastAPI, Uvicorn, SQLAlchemy, PyJWT
+- **RAG & Search**: LlamaIndex, ChromaDB (Persistent local vector store), FastEmbed
+- **AI Model**: OpenRouter API (`gpt-4o-mini`)
+- **Frontend**: HTML5, Vanilla JavaScript, Tailwind CSS
 
 ---
 
-## 📂 Project Directory Structure
+## ⚙️ Installation & Setup
 
-```text
-cognitive-vault/
-├── main.py              # FastAPI server & LlamaIndex RAG pipeline
-├── requirements.txt     # Python dependencies & production workers
-├── .env                 # API keys configuration (not committed)
-├── data/                # Uploaded multi-format source documents
-├── chroma_db/           # Local ChromaDB vector store directory
-└── static/
-    └── index.html       # 3-column Tailwind CSS frontend interface
-```
-
----
-
-## 🚀 Local Development Setup
-
-### 1. Clone & navigate to the repository
-
+### 1. Clone or Navigate to the Project Directory
 ```bash
-git clone https://github.com/MuhammadZaeem500/Cognitive-Vault.git
-cd Cognitive-Vault
+cd cognitive-vault
 ```
 
-### 2. Install dependencies
+### 2. Create and Activate a Virtual Environment
+```python
+python3 -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
 
+### 3. Install Dependencies
 ```bash
-pip install -r requirements.txt
+pip install fastapi uvicorn sqlalchemy pyjwt pandas python-dotenv chromadb llama-index fastembed
 ```
 
-### 3. Configure environment variables
-
-Create a `.env` file in the root directory and add your OpenRouter credentials:
-
+### 4. Configure Environment Variables
+Create a `.env` file in the root directory with your configuration:
 ```env
 OPENAI_API_KEY=your_openrouter_api_key_here
 OPENAI_MODEL=gpt-4o-mini
 ```
 
-### 4. Run the application
+---
 
+## ▶️ Running the Application
+
+Start the FastAPI development server:
 ```bash
 python3 main.py
 ```
 
-### 5. Open in browser
-
-Navigate to `http://127.0.0.1:8000` to interact with your CognitiveVault assistant.
+Open your browser and navigate to:
+👉 **`http://127.0.0.1:8000`**
 
 ---
 
-## ☁️ Deployment on Render
+## 📂 Project Structure
 
-This project is configured for production deployment on [Render](https://render.com/):
-
-1. Create a new **Web Service** on Render connected to your `Cognitive-Vault` GitHub repository.
-2. Use the following configuration:
-   * **Runtime:** `Python 3`
-   * **Build Command:** `pip3 install -r requirements.txt`
-   * **Start Command:**
-     ```bash
-     gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
-     ```
-3. Add your environment variables (`OPENAI_API_KEY` and `OPENAI_MODEL`) under the Render **Environment** tab and deploy.
+- `main.py` — FastAPI application server, routing, authentication middleware, and LlamaIndex RAG query pipeline.
+- `database.py` — SQLAlchemy configuration, user schema models, and password hashing logic.
+- `static/` — Frontend assets (`index.html` and custom UI stylesheets).
+- `data/` — Local user document storage directory (segmented by `user_id`).
+- `chroma_db/` — Persistent Chroma vector database storage.

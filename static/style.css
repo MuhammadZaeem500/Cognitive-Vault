@@ -3,6 +3,8 @@ body {
     font-family: 'Montserrat', sans-serif !important;
     background-color: #f7f3ed;
     color: #2c2522;
+    height: 100vh;
+    height: 100dvh;               /* mobile browsers: ignore the collapsing URL bar */
 }
 
 /* Cairo Play for headers and titles */
@@ -10,10 +12,38 @@ h1, h2, h3, .font-heading {
     font-family: 'Cairo Play', sans-serif !important;
 }
 
+/* ===== Responsive layout ===== */
+.input-bar { padding-bottom: max(0.75rem, env(safe-area-inset-bottom)); }
+
+@media (max-width: 767px) {
+    /* Sidebar and inspector become slide-over panels */
+    #sidebar,
+    #inspector {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        z-index: 40;
+        transition: transform 0.3s ease;
+        padding-top: max(1.25rem, env(safe-area-inset-top));
+        padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    }
+    #sidebar   { left: 0;  width: 85vw; max-width: 20rem; transform: translateX(-100%); }
+    #inspector { right: 0; width: 90vw; max-width: 24rem; transform: translateX(100%); }
+    #sidebar.open,
+    #inspector.open { transform: translateX(0); }
+
+    /* Keep the header clear of the notch */
+    #mainHeader { padding-top: max(1rem, env(safe-area-inset-top)); }
+}
+
+@media (min-width: 768px) {
+    .input-bar { padding-bottom: 1rem; }
+}
+
 /* ===== Custom Toasts ===== */
 #toast-root {
     position: fixed;
-    top: 20px;
+    top: calc(20px + env(safe-area-inset-top));
     right: 20px;
     display: flex;
     flex-direction: column;
@@ -91,6 +121,6 @@ h1, h2, h3, .font-heading {
 @keyframes toast-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 480px) {
-    #toast-root { left: 12px; right: 12px; top: 12px; }
+    #toast-root { left: 12px; right: 12px; }
     .toast { width: auto; }
 }
